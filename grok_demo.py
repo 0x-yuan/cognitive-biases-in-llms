@@ -1,8 +1,36 @@
 from core.utils import get_generator, get_metric, get_model
 import random
 import os
+import json
+import argparse
 
-os.environ["XAI_API_KEY"] = "xai-g2O6AziRqlNWabEi3vHy7FcnlNLy7aOWMPpYqOpX99QPWoHyJ4n0OvxO1Bd1TY7wcrmsgMg9eqfEQEJv"
+if "XAI_API_KEY" not in os.environ:
+    print("Warning: XAI_API_KEY environment variable not set. Please set it before running this script.")
+    print("Example: export XAI_API_KEY=your-api-key")
+    exit(1)
+
+AGENTS_FILE = 'data/generated_agents.json'
+
+def load_agents():
+    """
+    Load agent descriptions from the JSON file.
+    
+    Returns:
+        dict: A dictionary mapping agent IDs to their descriptions.
+    """
+    if not os.path.exists(AGENTS_FILE):
+        print(f"Warning: Agents file {AGENTS_FILE} not found.")
+        return {}
+    
+    try:
+        with open(AGENTS_FILE, 'r') as f:
+            data = json.load(f)
+        
+        agents = {agent['id']: agent['description'] for agent in data.get('agents', [])}
+        return agents
+    except Exception as e:
+        print(f"Error loading agents file: {e}")
+        return {}
 
 BIAS = 'Anchoring'               
 
@@ -12,28 +40,68 @@ RANDOMLY_FLIP_OPTIONS = True     # Whether answer option order will be randomly 
 SHUFFLE_ANSWER_OPTIONS = False   # Whether answer options will be randomly shuffled for all test cases
 
 
-if __name__ == "__main__":
-    print("Starting Grok-3 cognitive bias experiment...")
+def parse_args():
+    """
+    Parse command line arguments.
+    
+    Returns:
+        argparse.Namespace: The parsed arguments.
+    """
+    parser = argparse.ArgumentParser(description='Run a cognitive bias experiment with the Grok-3 model.')
+    parser.add_argument('--bias', type=str, default=BIAS, help='The cognitive bias to test.')
+    parser.add_argument('--agent-id', type=str, help='The ID of the agent description to use.')
+    parser.add_argument('--temperature-generation', type=float, default=TEMPERATURE_GENERATION, 
+                        help='The temperature for generation.')
+    parser.add_argument('--temperature-decision', type=float, default=TEMPERATURE_DECISION, 
+                        help='The temperature for decision.')
+    parser.add_argument('--seed', type=int, help='The seed for randomization. If not provided, a random seed will be used.')
+    
+    return parser.parse_args()
 
+
+if __name__ == "__main__":
+    args = parse_args()
+    
+    print("Starting Grok-3 cognitive bias experiment...")
+    
+    # Load agent descriptions
+    agents = load_agents()
+    agent_description = None
+    
+    if args.agent_id:
+        if args.agent_id in agents:
+            agent_description = agents[args.agent_id]
+            print(f"Using agent description: {args.agent_id}")
+        else:
+            print(f"Warning: Agent ID '{args.agent_id}' not found. Using default.")
+    
     with open('data/scenarios.txt') as f:
         scenarios = f.readlines()
 
     scenario = random.choice(scenarios)
     print(f"Selected scenario: {scenario}")
 
-    seed = random.randint(0, 1000)
+    seed = args.seed if args.seed is not None else random.randint(0, 1000)
     print(f"Using seed: {seed}")
     
-    generator = get_generator(BIAS)
-    metric_class = get_metric(BIAS)
-    print(f"Testing for cognitive bias: {BIAS}")
+    generator = get_generator(args.bias)
+    metric_class = get_metric(args.bias)
+    print(f"Testing for cognitive bias: {args.bias}")
 
-    generation_model = get_model("Grok-3")
-    decision_model = get_model("Grok-3", RANDOMLY_FLIP_OPTIONS, SHUFFLE_ANSWER_OPTIONS)
+    if agent_description:
+        from models.XAI.model import GrokThree
+        generation_model = GrokThree(agent_description=agent_description)
+        decision_model = GrokThree(randomly_flip_options=RANDOMLY_FLIP_OPTIONS, 
+                                  shuffle_answer_options=SHUFFLE_ANSWER_OPTIONS,
+                                  agent_description=agent_description)
+    else:
+        generation_model = get_model("Grok-3")
+        decision_model = get_model("Grok-3", RANDOMLY_FLIP_OPTIONS, SHUFFLE_ANSWER_OPTIONS)
+    
     print(f"Using model: {generation_model.NAME}")
 
     print("Generating test cases...")
-    test_cases = generator.generate_all(generation_model, [scenario], TEMPERATURE_GENERATION, seed, num_instances=1, max_retries=5)
+    test_cases = generator.generate_all(generation_model, [scenario], args.temperature_generation, seed, num_instances=1, max_retries=5)
     print("Test cases generated:")
     for tc in test_cases:
         if tc is not None:
@@ -43,7 +111,7 @@ if __name__ == "__main__":
             print("Failed to generate test case")
 
     print("\nMaking decisions on test cases...")
-    decision_results = decision_model.decide_all(test_cases, TEMPERATURE_DECISION, seed)
+    decision_results = decision_model.decide_all(test_cases, args.temperature_decision, seed)
     print("Decision results:")
     for dr in decision_results:
         if dr is not None:

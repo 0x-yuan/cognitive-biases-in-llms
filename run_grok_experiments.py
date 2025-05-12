@@ -5,10 +5,37 @@ Script to run cognitive bias experiments with the Grok-3 model.
 import os
 import argparse
 import pandas as pd
+import json
 from datetime import datetime
 from core.utils import get_generator, get_metric, get_model, get_supported_models
 
-os.environ["XAI_API_KEY"] = "xai-g2O6AziRqlNWabEi3vHy7FcnlNLy7aOWMPpYqOpX99QPWoHyJ4n0OvxO1Bd1TY7wcrmsgMg9eqfEQEJv"
+if "XAI_API_KEY" not in os.environ:
+    print("Warning: XAI_API_KEY environment variable not set. Please set it before running this script.")
+    print("Example: export XAI_API_KEY=your-api-key")
+    exit(1)
+
+AGENTS_FILE = 'data/generated_agents.json'
+
+def load_agents():
+    """
+    Load agent descriptions from the JSON file.
+    
+    Returns:
+        dict: A dictionary mapping agent IDs to their descriptions.
+    """
+    if not os.path.exists(AGENTS_FILE):
+        print(f"Warning: Agents file {AGENTS_FILE} not found. Creating a sample file.")
+        return {}
+    
+    try:
+        with open(AGENTS_FILE, 'r') as f:
+            data = json.load(f)
+        
+        agents = {agent['id']: agent['description'] for agent in data.get('agents', [])}
+        return agents
+    except Exception as e:
+        print(f"Error loading agents file: {e}")
+        return {}
 
 DEFAULT_TEMPERATURE_GENERATION = 0.7
 DEFAULT_TEMPERATURE_DECISION = 0.0
@@ -18,7 +45,7 @@ DEFAULT_NUM_INSTANCES = 5
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_SEED = 42
 
-def run_experiment(bias, model_name="Grok-3", temperature_generation=DEFAULT_TEMPERATURE_GENERATION, 
+def run_experiment(bias, model_name="Grok-3", agent_id=None, temperature_generation=DEFAULT_TEMPERATURE_GENERATION, 
                   temperature_decision=DEFAULT_TEMPERATURE_DECISION, randomly_flip_options=DEFAULT_RANDOMLY_FLIP_OPTIONS,
                   shuffle_answer_options=DEFAULT_SHUFFLE_ANSWER_OPTIONS, num_instances=DEFAULT_NUM_INSTANCES, 
                   max_retries=DEFAULT_MAX_RETRIES, seed=DEFAULT_SEED):
@@ -28,6 +55,7 @@ def run_experiment(bias, model_name="Grok-3", temperature_generation=DEFAULT_TEM
     Args:
         bias (str): The cognitive bias to test.
         model_name (str): The name of the model to use.
+        agent_id (str): The ID of the agent description to use.
         temperature_generation (float): The temperature for generation.
         temperature_decision (float): The temperature for decision.
         randomly_flip_options (bool): Whether to randomly flip options.
@@ -39,6 +67,17 @@ def run_experiment(bias, model_name="Grok-3", temperature_generation=DEFAULT_TEM
     Returns:
         tuple: A tuple containing the test cases, decision results, and metrics.
     """
+    # Load agent descriptions
+    agents = load_agents()
+    agent_description = None
+    
+    if agent_id:
+        if agent_id in agents:
+            agent_description = agents[agent_id]
+            print(f"Using agent description: {agent_id}")
+        else:
+            print(f"Warning: Agent ID '{agent_id}' not found in agents file. Using default.")
+    
     print(f"Running experiment for bias: {bias} with model: {model_name}")
     
     with open('data/scenarios.txt') as f:
@@ -47,8 +86,16 @@ def run_experiment(bias, model_name="Grok-3", temperature_generation=DEFAULT_TEM
     generator = get_generator(bias)
     metric_class = get_metric(bias)
     
-    generation_model = get_model(model_name)
-    decision_model = get_model(model_name, randomly_flip_options, shuffle_answer_options)
+    # Create models with agent description
+    if model_name == "Grok-3" and agent_description:
+        from models.XAI.model import GrokThree
+        generation_model = GrokThree(agent_description=agent_description)
+        decision_model = GrokThree(randomly_flip_options=randomly_flip_options, 
+                                  shuffle_answer_options=shuffle_answer_options,
+                                  agent_description=agent_description)
+    else:
+        generation_model = get_model(model_name)
+        decision_model = get_model(model_name, randomly_flip_options, shuffle_answer_options)
     
     print(f"Generating {num_instances} test cases per scenario...")
     test_cases = generator.generate_all(
@@ -133,6 +180,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run cognitive bias experiments with the Grok-3 model.')
     parser.add_argument('--bias', type=str, default='Anchoring', help='The cognitive bias to test.')
     parser.add_argument('--model', type=str, default='Grok-3', help='The model to use.')
+    parser.add_argument('--agent-id', type=str, help='The ID of the agent description to use.')
     parser.add_argument('--temperature-generation', type=float, default=DEFAULT_TEMPERATURE_GENERATION, 
                         help='The temperature for generation.')
     parser.add_argument('--temperature-decision', type=float, default=DEFAULT_TEMPERATURE_DECISION, 
@@ -149,6 +197,8 @@ def main():
                         help='The seed for randomization.')
     parser.add_argument('--all-biases', action='store_true', 
                         help='Run experiments for all available biases.')
+    parser.add_argument('--all-agents', action='store_true',
+                        help='Run experiments for all available agent descriptions.')
     
     args = parser.parse_args()
     
@@ -157,29 +207,52 @@ def main():
     else:
         biases = [args.bias]
     
+    # Load agent descriptions
+    agents = load_agents()
+    
+    agent_ids = []
+    if args.all_agents:
+        agent_ids = list(agents.keys())
+        print(f"Running experiments with all {len(agent_ids)} agents")
+    elif args.agent_id:
+        if args.agent_id in agents:
+            agent_ids = [args.agent_id]
+            print(f"Running experiments with agent: {args.agent_id}")
+        else:
+            print(f"Warning: Agent ID '{args.agent_id}' not found. Running without agent description.")
+            agent_ids = [None]
+    else:
+        agent_ids = [None]  # Run without agent description
+    
     for bias in biases:
-        try:
-            test_cases, decision_results, computed_metric, aggregated_metric = run_experiment(
-                bias,
-                args.model,
-                args.temperature_generation,
-                args.temperature_decision,
-                args.randomly_flip_options,
-                args.shuffle_answer_options,
-                args.num_instances,
-                args.max_retries,
-                args.seed
-            )
-            
-            save_results(bias, args.model, test_cases, decision_results, computed_metric, aggregated_metric)
-            
-            print(f"Experiment for bias {bias} completed successfully.")
-            print(f"Aggregated metric: {aggregated_metric}")
-            print("-" * 50)
-            
-        except Exception as e:
-            print(f"Error running experiment for bias {bias}: {e}")
-            print("-" * 50)
+        for agent_id in agent_ids:
+            try:
+                agent_suffix = f"_{agent_id}" if agent_id else ""
+                print(f"Running experiment for bias: {bias} with model: {args.model}{agent_suffix}")
+                
+                test_cases, decision_results, computed_metric, aggregated_metric = run_experiment(
+                    bias,
+                    args.model,
+                    agent_id,
+                    args.temperature_generation,
+                    args.temperature_decision,
+                    args.randomly_flip_options,
+                    args.shuffle_answer_options,
+                    args.num_instances,
+                    args.max_retries,
+                    args.seed
+                )
+                
+                model_name = f"{args.model}_{agent_id}" if agent_id else args.model
+                save_results(bias, model_name, test_cases, decision_results, computed_metric, aggregated_metric)
+                
+                print(f"Experiment for bias {bias} with agent {agent_id if agent_id else 'default'} completed successfully.")
+                print(f"Aggregated metric: {aggregated_metric}")
+                print("-" * 50)
+                
+            except Exception as e:
+                print(f"Error running experiment for bias {bias} with agent {agent_id if agent_id else 'default'}: {e}")
+                print("-" * 50)
 
 if __name__ == "__main__":
     main()
