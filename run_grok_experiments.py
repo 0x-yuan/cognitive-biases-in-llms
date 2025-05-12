@@ -14,7 +14,7 @@ if "XAI_API_KEY" not in os.environ:
     print("Example: export XAI_API_KEY=your-api-key")
     exit(1)
 
-AGENTS_FILE = 'data/generated_agents.json'
+AGENTS_FILE = 'data/agent_descriptions.json'
 
 def load_agents():
     """

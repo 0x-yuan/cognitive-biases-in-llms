@@ -9,7 +9,7 @@ if "XAI_API_KEY" not in os.environ:
     print("Example: export XAI_API_KEY=your-api-key")
     exit(1)
 
-AGENTS_FILE = 'data/generated_agents.json'
+AGENTS_FILE = 'data/agent_descriptions.json'
 
 def load_agents():
     """
@@ -121,7 +121,6 @@ if __name__ == "__main__":
             print("Failed to make decision")
 
     print("\nCalculating bias metrics...")
-    # metric_class is already an instance
     metric_class.test_results = list(zip(test_cases, decision_results))
     computed_metric = metric_class.compute()
     print(f'Bias metric per each case:\n{computed_metric}')

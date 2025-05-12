@@ -52,6 +52,9 @@ class Grok(LLM):
         
         messages.append({"role": "user", "content": prompt})
         
+        if seed is not None:
+            seed = seed % (2**31)
+        
         response = self._CLIENT.chat.completions.create(
             model=self.NAME,
             temperature=temperature,
@@ -148,6 +151,9 @@ class Grok(LLM):
             
         messages.append({"role": "user", "content": user_prompt})
 
+        if seed is not None:
+            seed = seed % (2**31)
+            
         response = self._CLIENT.chat.completions.create(
             model=self.NAME,
             temperature=temperature,
