@@ -130,9 +130,24 @@ def run_experiment(bias, model_name="Grok-3", agent_id=None, temperature_generat
     )
     
     print("Calculating metrics...")
-    metric_class.test_results = list(zip(test_cases, decision_results))
-    computed_metric = metric_class.compute()
-    aggregated_metric = metric_class.aggregate(computed_metric)
+    valid_test_results = [(tc, dr) for tc, dr in zip(test_cases, decision_results) if tc is not None and dr is not None]
+    computed_metric = None
+    aggregated_metric = None
+    
+    if valid_test_results:
+        try:
+            MetricClass = get_metric(bias)
+            metric = MetricClass(test_results=valid_test_results)
+            computed_metric = metric.compute()
+            aggregated_metric = metric.aggregate(computed_metric)
+        except Exception as e:
+            print(f"Error calculating metrics: {e}")
+            computed_metric = None
+            aggregated_metric = None
+    else:
+        print("No valid test results to calculate metrics.")
+        computed_metric = None
+        aggregated_metric = None
     
     return test_cases, decision_results, computed_metric, aggregated_metric
 

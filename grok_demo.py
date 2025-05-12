@@ -135,8 +135,19 @@ if __name__ == "__main__":
             print("Failed to make decision")
 
     print("\nCalculating bias metrics...")
-    metric_class.test_results = list(zip(test_cases, decision_results))
-    computed_metric = metric_class.compute()
-    print(f'Bias metric per each case:\n{computed_metric}')
-    aggregated_metric = metric_class.aggregate(computed_metric)
-    print(f'Aggregated bias metric: {aggregated_metric}')
+    valid_test_results = [(tc, dr) for tc, dr in zip(test_cases, decision_results) if tc is not None and dr is not None]
+    computed_metric = None
+    aggregated_metric = None
+    
+    if valid_test_results:
+        try:
+            MetricClass = get_metric(args.bias)
+            metric = MetricClass(test_results=valid_test_results)
+            computed_metric = metric.compute()
+            print(f'Bias metric per each case:\n{computed_metric}')
+            aggregated_metric = metric.aggregate(computed_metric)
+            print(f'Aggregated bias metric: {aggregated_metric}')
+        except Exception as e:
+            print(f"Error calculating metrics: {e}")
+    else:
+        print("No valid test results to calculate metrics.")

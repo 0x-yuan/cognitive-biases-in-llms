@@ -69,8 +69,8 @@ class AnchoringTestGenerator(TestGenerator):
             temperature=temperature,
             seed=seed,
             scenario=scenario,
-            variant=None,
-            remarks=None,
+            variant="",
+            remarks="",
         )
 
         return test_case
