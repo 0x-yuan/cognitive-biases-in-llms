@@ -130,7 +130,6 @@ def run_experiment(bias, model_name="Grok-3", agent_id=None, temperature_generat
     )
     
     print("Calculating metrics...")
-    # metric_class is already an instance
     metric_class.test_results = list(zip(test_cases, decision_results))
     computed_metric = metric_class.compute()
     aggregated_metric = metric_class.aggregate(computed_metric)
