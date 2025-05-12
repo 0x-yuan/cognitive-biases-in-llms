@@ -28,6 +28,7 @@ SUPPORTED_MODELS = [
     "WizardLM-2-7B",
     "Phi-3-Vision-128K-Instruct",
     "Yi-Large",
+    "Grok-3",
     "Random"
 ]
 
@@ -176,6 +177,9 @@ def get_model(model_name: str, randomly_flip_options: bool = False, shuffle_answ
     elif model_name == "Yi-Large":
         from models.ZeroOneAI.model import YiLarge
         return YiLarge(randomly_flip_options, shuffle_answer_options)
+    elif model_name == "Grok-3":
+        from models.XAI.model import GrokThree
+        return GrokThree(randomly_flip_options, shuffle_answer_options)
     elif model_name == "Random":
         from models.Random.model import RandomModel
         return RandomModel(randomly_flip_options, shuffle_answer_options)
