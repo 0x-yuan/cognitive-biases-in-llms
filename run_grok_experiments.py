@@ -14,7 +14,7 @@ if "XAI_API_KEY" not in os.environ:
     print("Example: export XAI_API_KEY=your-api-key")
     exit(1)
 
-AGENTS_FILE = 'data/agent_descriptions.json'
+AGENTS_FILE = 'data/generated_agents.json'
 
 def load_agents():
     """
@@ -24,14 +24,28 @@ def load_agents():
         dict: A dictionary mapping agent IDs to their descriptions.
     """
     if not os.path.exists(AGENTS_FILE):
-        print(f"Warning: Agents file {AGENTS_FILE} not found. Creating a sample file.")
+        print(f"Warning: Agents file {AGENTS_FILE} not found.")
         return {}
     
     try:
         with open(AGENTS_FILE, 'r') as f:
             data = json.load(f)
         
-        agents = {agent['id']: agent['description'] for agent in data.get('agents', [])}
+        agents = {}
+        for i, agent in enumerate(data):
+            if 'name' in agent and 'description' in agent:
+                agent_id = agent.get('name', f'agent_{i}').replace(' ', '_').lower()
+                agents[agent_id] = agent['description']
+        
+        if not agents:
+            agents = {
+                'mathematician': 'You are a PhD-level mathematician with expertise in probability, statistics, and decision theory.',
+                'economist': 'You are an experienced economist specializing in behavioral economics and decision-making.',
+                'psychologist': 'You are a cognitive psychologist with expertise in human decision-making and cognitive biases.',
+                'rationalist': 'You are a rationalist trained to identify and avoid cognitive biases.',
+                'intuitive': 'You rely heavily on intuition and gut feelings when making decisions.'
+            }
+        
         return agents
     except Exception as e:
         print(f"Error loading agents file: {e}")
